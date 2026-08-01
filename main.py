@@ -14,6 +14,12 @@ from rich.prompt import Prompt
 
 from modules.ffmpeg_engine import check_ffmpeg_installed
 from modules.audio_muxer import check_ffprobe_installed
+from modules.transcriber import (
+    check_whisper_installed,
+    transcribe_audio,
+    format_segments_as_transcript,
+    save_word_timestamps_json
+)
 from modules.timing_calculator import MismatchWarning
 from modules.pipeline import SlideshowPipeline
 
@@ -22,7 +28,7 @@ console = Console()
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Generate a slideshow video synchronized with timestamped audio transcript."
+        description="Generate a slideshow video synchronized with transcript timestamps & optional Whisper audio transcription."
     )
     parser.add_argument(
         "--images-dir", "-i",
@@ -32,9 +38,33 @@ def parse_args():
     )
     parser.add_argument(
         "--transcript", "-t",
-        required=True,
+        default=None,
         type=str,
         help="Path to text transcript file containing bracketed timestamps like [m:ss] or [mm:ss]"
+    )
+    parser.add_argument(
+        "--transcribe-audio",
+        default=None,
+        type=str,
+        help="Path to audio file to transcribe automatically using OpenAI Whisper (mutually exclusive with --transcript)"
+    )
+    parser.add_argument(
+        "--whisper-model",
+        default="small",
+        type=str,
+        help="Whisper model size: tiny, base, small, medium, large (default: small for high word precision)"
+    )
+    parser.add_argument(
+        "--save-transcript",
+        default=None,
+        type=str,
+        help="Path to save generated text transcript file (default: output_transcript.txt)"
+    )
+    parser.add_argument(
+        "--save-word-timestamps",
+        default=None,
+        type=str,
+        help="Path to save word-level timestamps JSON file (default: output_words.json)"
     )
     parser.add_argument(
         "--output", "-o",
@@ -128,9 +158,18 @@ def main():
 
     console.print(Panel.fit(
         "[bold cyan]Slideshow Video Generator[/bold cyan]\n"
-        "[dim]Synchronizing image sequence with transcript timestamps & audio[/dim]",
+        "[dim]Synchronizing image sequence with transcript timestamps, Whisper STT & audio[/dim]",
         border_style="cyan"
     ))
+
+    # Validate input transcript / transcribe arguments
+    if args.transcript and args.transcribe_audio:
+        console.print("[bold red]Error:[/bold red] Cannot specify both --transcript and --transcribe-audio. Please specify only one.")
+        sys.exit(1)
+
+    if not args.transcript and not args.transcribe_audio:
+        console.print("[bold red]Error:[/bold red] Missing transcript input! Please specify either --transcript <file> OR --transcribe-audio <audio_file>.")
+        sys.exit(1)
 
     # 1. Verify FFmpeg & ffprobe
     try:
@@ -142,14 +181,61 @@ def main():
         console.print(f"[bold red]Error:[/bold red] {err}")
         sys.exit(1)
 
+    # 2. Handle automatic transcription if --transcribe-audio is set
+    transcript_file_path = args.transcript
+
+    if args.transcribe_audio:
+        try:
+            check_whisper_installed()
+        except ImportError as err:
+            console.print(f"[bold red]Error:[/bold red] {err}")
+            sys.exit(1)
+
+        console.print(f"🎙️  [bold yellow]Transcribing audio using Whisper model '{args.whisper_model}'...[/bold yellow]")
+        console.print("[dim](Running on CPU/GPU, this may take a few moments depending on model size and audio length)[/dim]")
+
+        with console.status(f"[bold green]Whisper is transcribing '{Path(args.transcribe_audio).name}'...[/bold green]"):
+            res = transcribe_audio(args.transcribe_audio, model_size=args.whisper_model)
+
+        # Build formatted transcript text
+        formatted_txt = format_segments_as_transcript(res["segments"])
+
+        # Determine transcript output path
+        if args.save_transcript:
+            t_path = Path(args.save_transcript).resolve()
+        else:
+            t_path = Path("output_transcript.txt").resolve()
+
+        t_path.parent.mkdir(parents=True, exist_ok=True)
+        t_path.write_text(formatted_txt, encoding='utf-8')
+        transcript_file_path = str(t_path)
+
+        # Save word-level timestamps JSON
+        if args.save_word_timestamps:
+            w_path = Path(args.save_word_timestamps).resolve()
+        else:
+            w_path = Path("output_words.json").resolve()
+
+        save_word_timestamps_json(res["words"], w_path)
+
+        console.print(Panel(
+            f"[bold cyan]Whisper Model:[/bold cyan] {args.whisper_model}\n"
+            f"[bold cyan]Segments Extracted:[/bold cyan] {len(res['segments'])}\n"
+            f"[bold cyan]Word Timestamps Extracted:[/bold cyan] {len(res['words'])}\n"
+            f"[bold cyan]Saved Transcript:[/bold cyan] [underline]{t_path}[/underline]\n"
+            f"[bold cyan]Saved Word JSON:[/bold cyan] [underline]{w_path}[/underline]",
+            title="[bold green]Speech-to-Text Transcription Report[/bold green]",
+            border_style="green"
+        ))
+
     pipeline = SlideshowPipeline()
 
-    # 2. Execute pipeline
+    # 3. Execute pipeline
     try:
         with console.status("[bold green]Calculating timings and rendering video...[/bold green]"):
             segments, v_dur, a_dur, diff, was_extended, extend_by = pipeline.run(
                 images_dir=args.images_dir,
-                transcript_path=args.transcript,
+                transcript_path=transcript_file_path,
                 output_path=args.output,
                 audio_path=args.audio,
                 audio_offset=args.audio_offset,
@@ -161,7 +247,7 @@ def main():
                 mismatch_resolver=handle_interactive_mismatch
             )
 
-        # 3. Print schedule report table
+        # 4. Print schedule report table
         table = Table(title="[bold]Segment Schedule Report[/bold]", show_header=True, header_style="bold magenta")
         table.add_column("#", justify="right", style="dim")
         table.add_column("Image File", style="cyan")
@@ -180,7 +266,7 @@ def main():
 
         console.print(table)
 
-        # 4. Print Audio & Duration Summary Report
+        # 5. Print Audio & Duration Summary Report
         if args.audio:
             diff_text = f"{diff:.2f}s"
             if was_extended:
@@ -203,7 +289,7 @@ def main():
         else:
             console.print(f"[bold green]Total Video Duration:[/bold green] [bold white]{v_dur:.2f}s[/bold white] [dim](Silent Mode)[/dim]\n")
 
-        # 5. Final render status
+        # 6. Final render status
         console.print(f"[bold green]Success![/bold green] Final slideshow video saved to: [underline cyan]{Path(args.output).resolve()}[/underline cyan]")
 
     except MismatchWarning as warn:
