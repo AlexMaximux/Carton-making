@@ -9,3 +9,6 @@ __pycache__/
 *.mp3
 test_assets/
 docs/superpowers/
+output_transcript.txt
+output_words.json
+
