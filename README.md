@@ -1,8 +1,9 @@
-# Modular Slideshow Video Generator
+# Modular Slideshow Video Generator & Whisper Transcriber
 
 A flexible, reusable Python CLI tool that converts a folder of numerically-ordered images and a timestamped transcript file (or automatically transcribed audio via OpenAI Whisper) into a synchronized video slideshow using FFmpeg.
 
 ## Features
+- **Standalone Transcribe-Only Mode**: Run speech-to-text on any audio file without images or video rendering (`python main.py --transcribe-audio ./v/audio.mp3`).
 - **Dynamic Image Sorting**: Works with any count and extension (`.jpg`, `.jpeg`, `.png`), automatically sorted numerically by numbers embedded in filenames (`1.jpg`, `2.png`, `10.jpeg`).
 - **Flexible Transcript Regex Parsing**: Supports bracketed timestamps like `[m:ss]`, `[mm:ss]`, `[hh:mm:ss]`, and fractional seconds `[m:ss.ms]`.
 - **Automatic Speech-to-Text Transcription**: Powered by OpenAI Whisper (`--transcribe-audio`). Automatically extracts `[mm:ss]` sentence segments and word-level JSON timestamps for future highlighted subtitles.
@@ -34,10 +35,23 @@ pip install -r requirements.txt
 
 ---
 
-## Usage
+## Execution Modes & Usage Examples
 
-### 1. Fully Automated (Images + Audio -> Video)
-No manual transcript typing required! Whisper transcribes the audio and builds the video in one command:
+### 1. Standalone Transcribe-Only Mode (Audio -> Transcript & Words JSON)
+Transcribes speech from an audio file without requiring images or rendering any video. Default output files (`output_transcript.txt` and `output_words.json`) are saved directly in the audio file's directory:
+
+```bash
+python main.py --transcribe-audio ./v/voiceover01.mp3
+```
+
+Customizing save paths or Whisper model:
+
+```bash
+python main.py --transcribe-audio ./v/voiceover01.mp3 --whisper-model medium --save-transcript ./v/custom_transcript.txt --save-word-timestamps ./v/custom_words.json
+```
+
+### 2. Fully Automated Mode (Images + Audio -> Video)
+Whisper transcribes the audio, generates the timing schedule, and renders the complete video in one command:
 
 ```bash
 python main.py --images-dir ./v/ --transcribe-audio ./v/voiceover01.mp3 --audio ./v/voiceover01.mp3 --output final.mp4
@@ -45,14 +59,14 @@ python main.py --images-dir ./v/ --transcribe-audio ./v/voiceover01.mp3 --audio 
 
 > **Model Precision Note**: The default Whisper model size is `--whisper-model small`. Using `small` or `medium` provides superior word-level timestamp accuracy (`output_words.json`), which is recommended for word-highlighted subtitle generators.
 
-### 2. Manual Transcript Mode
+### 3. Manual Transcript Mode
 Provide your own timestamped text file:
 
 ```bash
 python main.py --images-dir ./images --transcript ./transcript.txt --audio ./voiceover.mp3 --output output.mp4
 ```
 
-### 3. Audio Offset (Delay or Advance)
+### 4. Audio Offset (Delay or Advance)
 
 ```bash
 # Delay audio start by 2.5 seconds relative to video
@@ -68,12 +82,12 @@ python main.py -i ./images -t ./transcript.txt -a ./voiceover.mp3 --audio-offset
 
 | Argument | Short | Description | Default |
 | :--- | :--- | :--- | :--- |
-| `--images-dir` | `-i` | **Required**. Path to folder containing images. | - |
+| `--transcribe-audio` | - | Path to audio file to transcribe automatically via Whisper (mutually exclusive with `--transcript`). | `None` |
+| `--images-dir` | `-i` | Path to folder containing images (required for video modes). | `None` |
 | `--transcript` | `-t` | Path to manual transcript file (mutually exclusive with `--transcribe-audio`). | `None` |
-| `--transcribe-audio` | - | Path to audio file to transcribe automatically via Whisper. | `None` |
 | `--whisper-model` | - | Whisper model size (`tiny`, `base`, `small`, `medium`, `large`). | `small` |
-| `--save-transcript` | - | Path to save generated text transcript file. | `output_transcript.txt` |
-| `--save-word-timestamps` | - | Path to save word-level timestamps JSON file. | `output_words.json` |
+| `--save-transcript` | - | Path to save generated text transcript file. | `output_transcript.txt` in audio directory |
+| `--save-word-timestamps` | - | Path to save word-level timestamps JSON file. | `output_words.json` in audio directory |
 | `--audio` | `-a` | Optional path to audio file to multiplex into final video. | `None` (Silent) |
 | `--audio-offset` | - | Audio start delay ($>0$) or trim ($<0$) in seconds. | `0.0` |
 | `--keep-temp` | - | Keep intermediate silent video file when `--audio` is set. | `False` |
@@ -100,7 +114,7 @@ python main.py -i ./images -t ./transcript.txt -a ./voiceover.mp3 --audio-offset
 
 ```
 .
-├── main.py                       # CLI entry point (argparse & rich UI/logging)
+├── main.py                       # CLI entry point & branching orchestrator
 ├── modules/
 │   ├── __init__.py
 │   ├── transcript_parser.py      # Extract timestamps from text files
@@ -115,7 +129,8 @@ python main.py -i ./images -t ./transcript.txt -a ./voiceover.mp3 --audio-offset
 │   ├── test_timing_calculator.py
 │   ├── test_ffmpeg_engine.py
 │   ├── test_audio_muxer.py
-│   └── test_transcriber.py
+│   ├── test_transcriber.py
+│   └── test_main.py
 ├── docs/
 │   └── superpowers/specs/        # Design specification documentation
 ├── requirements.txt              # Dependencies
