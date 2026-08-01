@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+*.mp4
+*.avi
+*.mkv
+*.wav
+*.mp3
+test_assets/
+docs/superpowers/
