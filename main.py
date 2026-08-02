@@ -144,11 +144,15 @@ def parse_args(args_list=None):
         type=str,
         help="Hex color for caption outline (default: #000000)"
     )
+    def parse_px_int(val: str) -> int:
+        clean_val = str(val).strip().rstrip("px").rstrip("PX").strip()
+        return int(clean_val)
+
     parser.add_argument(
         "--caption-font-size",
         default=None,
-        type=int,
-        help="Caption font size in px (default: auto ~5% of video height)"
+        type=parse_px_int,
+        help="Caption font size in px, e.g. 85 or '85px' (default: auto ~5% of video height)"
     )
     parser.add_argument(
         "--caption-position",
@@ -159,9 +163,9 @@ def parse_args(args_list=None):
     )
     parser.add_argument(
         "--caption-margin-bottom",
-        default=80,
-        type=int,
-        help="Vertical margin in px from screen edge (default: 80)"
+        default=None,
+        type=parse_px_int,
+        help="Bottom margin in px, e.g. 80 or '80px' (default: auto ~8% of video height)"
     )
     parser.add_argument(
         "--caption-max-words-per-line",
