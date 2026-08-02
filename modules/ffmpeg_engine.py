@@ -70,6 +70,7 @@ def build_concat_file_content(segments: List[ImageSegment]) -> str:
     """
     Generates content for FFmpeg concat demuxer file.
     Each file entry is followed by its duration in seconds.
+    The last file entry is repeated at the end to ensure FFmpeg honors its duration.
     """
     lines = []
     for seg in segments:
@@ -77,6 +78,10 @@ def build_concat_file_content(segments: List[ImageSegment]) -> str:
         escaped_path = seg.image_path.replace("'", "'\\''")
         lines.append(f"file '{escaped_path}'")
         lines.append(f"duration {seg.duration:.4f}")
+
+    if segments:
+        last_escaped = segments[-1].image_path.replace("'", "'\\''")
+        lines.append(f"file '{last_escaped}'")
 
     return "\n".join(lines) + "\n"
 
@@ -107,6 +112,8 @@ def render_slideshow(
         tmp_path = tmp.name
 
     try:
+        total_dur = segments[-1].end_time if segments else 0.0
+
         # Build video filter chain
         base_filter = (
             f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
@@ -126,6 +133,7 @@ def render_slideshow(
             "-f", "concat",
             "-safe", "0",
             "-i", tmp_path,
+            "-t", f"{total_dur:.4f}",
             "-vf", full_filter,
             "-c:v", "libx264",
             "-preset", "medium",

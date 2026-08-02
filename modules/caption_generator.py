@@ -12,13 +12,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 
-def hex_to_ass_color(hex_str: str, include_alpha: bool = False) -> str:
+def hex_to_ass_color(hex_str: str, include_alpha: bool = False, trailing_amp: bool = True) -> str:
     """
-    Converts a hex color code (#RRGGBB or RRGGBB) to ASS color format (&HBBGGRR& or &HAABBGGRR&).
-
-    Examples:
-      hex_to_ass_color("#FFD60A") -> "&H0AD6FF&"
-      hex_to_ass_color("#FFD60A", include_alpha=True) -> "&H000AD6FF&"
+    Converts a hex color code (#RRGGBB or RRGGBB) to ASS color format.
+    - For inline tags: &HBBGGRR& (include_alpha=False, trailing_amp=True)
+    - For V4+ Styles: &H00BBGGRR (include_alpha=True, trailing_amp=False)
     """
     clean_hex = hex_str.strip().lstrip("#").lstrip("&H")
     if len(clean_hex) == 3:
@@ -31,9 +29,11 @@ def hex_to_ass_color(hex_str: str, include_alpha: bool = False) -> str:
     g = clean_hex[2:4]
     b = clean_hex[4:6]
 
+    amp = "&" if trailing_amp else ""
+
     if include_alpha:
-        return f"&H00{b}{g}{r}&"
-    return f"&H{b}{g}{r}&"
+        return f"&H00{b}{g}{r}{amp}"
+    return f"&H{b}{g}{r}{amp}"
 
 
 def format_ass_time(seconds: float) -> str:
@@ -199,10 +199,10 @@ def build_ass_subtitle(
     text_hex = config.get("text_color", "#FFFFFF")
     outline_hex = config.get("outline_color", "#000000")
 
-    ass_highlight = hex_to_ass_color(highlight_hex)
-    ass_text = hex_to_ass_color(text_hex)
-    ass_text_style = hex_to_ass_color(text_hex, include_alpha=True)
-    ass_outline_style = hex_to_ass_color(outline_hex, include_alpha=True)
+    ass_highlight = hex_to_ass_color(highlight_hex, include_alpha=False, trailing_amp=True)
+    ass_text = hex_to_ass_color(text_hex, include_alpha=False, trailing_amp=True)
+    ass_text_style = hex_to_ass_color(text_hex, include_alpha=True, trailing_amp=False)
+    ass_outline_style = hex_to_ass_color(outline_hex, include_alpha=True, trailing_amp=False)
 
     position = str(config.get("position", "bottom")).lower()
     if position == "top":

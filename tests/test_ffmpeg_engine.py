@@ -39,5 +39,6 @@ def test_build_concat_file_content():
         "duration 4.5000\n"
         "file '/path/to/2.png'\n"
         "duration 3.0000\n"
+        "file '/path/to/2.png'\n"
     )
     assert content == expected

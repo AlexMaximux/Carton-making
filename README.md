@@ -1,237 +1,316 @@
-# Modular Slideshow Video Generator & Whisper Transcriber
+# Voice-to-Video Slideshow Generator with Transcription and Captions
 
-A flexible, reusable Python CLI & REST API application that converts a folder of numerically-ordered images and a timestamped transcript file (or automatically transcribed audio via OpenAI Whisper) into a synchronized video slideshow using FFmpeg.
+A modular Python CLI and FastAPI application for building narrated slideshow videos from audio, transcript timing, and generated images.
+
+The workflow has **two stages involving this app**:
+
+1. Use the app first to convert voice/audio into a timed transcript.
+2. Use that transcript outside the app with AI to generate matching images.
+3. Put the generated images into a folder.
+4. Use the app again to combine the images, transcript, and audio into a final synchronized video.
+5. Optionally add captions to the output video.
+
+***
+
+## Main Idea
+
+This app is built for a workflow where the **voice comes first**.
+
+You first give the app an audio file. It converts that audio into a timed transcript. Then that transcript is used outside the app to generate images with another AI system or script. After the images are ready, this app is used again to assemble the final video using:
+
+- the generated images,
+- the transcript timestamps,
+- and the original audio.
+
+So the full pipeline is:
+
+**voice -> timed transcript -> external AI image generation -> image folder -> final video**
+
+***
+
+## Workflow
+
+### Step 1: Convert Voice to Timed Transcript
+First, use the app to transcribe the voiceover audio.
+
+This step produces:
+
+- A timed transcript file such as `transcript.txt`
+- Optionally a `words.json` file for word-level timing
+
+Example:
+
+```bash
+python main.py --transcribe-audio ./voiceover.mp3
+```
+
+This transcript becomes the instruction/timing source for the next step.
+
+### Step 2: Generate Images Outside the App
+Use the timed transcript with an external AI image generator, script, or workflow to create pictures that match the spoken content.
+
+This part happens **outside** this app.
+
+After the images are generated, place them in a folder such as:
+
+```text
+./images/
+```
+
+Example filenames:
+
+```text
+1.jpg
+2.jpg
+3.jpg
+10.jpg
+```
+
+### Step 3: Create the Final Video
+After the transcript and images are ready, use the app again to generate the video.
+
+```bash
+python main.py \
+  --images-dir ./images \
+  --transcript ./transcript.txt \
+  --audio ./voiceover.mp3 \
+  --add-captions \
+  --output output.mp4
+```
+
+The app will:
+
+- Sort the images numerically.
+- Parse transcript timestamps.
+- Calculate how long each image should be shown.
+- Render the slideshow video.
+- Merge the original audio.
+- Optionally burn captions into the final output.
+
+***
+
+## What This App Does
+
+This application is responsible for **two important parts** of the pipeline:
+
+### 1. Voice to timed transcript
+It can convert audio into a transcript with timestamps.
+
+### 2. Images + transcript + audio to final video
+It can assemble a final slideshow video by using transcript timing to control image durations.
+
+### 3. Optional caption generation
+It can add subtitles or word-highlighted captions to the output video.
+
+***
+
+## What This App Does Not Do
+
+This app does **not** generate images by itself.
+
+Image generation happens between the two app stages, using another AI model, image generation tool, or custom script based on the transcript created in Step 1.
+
+***
 
 ## Features
-- **FastAPI Asynchronous REST API**: Polling-based background job architecture (`api.py`) exposing speech-to-text transcription, video generation, and file downloads.
-- **Standalone Transcribe-Only Mode**: Run speech-to-text on any audio file via CLI or HTTP API without requiring images or video rendering.
-- **Dynamic Image Sorting**: Works with any count and extension (`.jpg`, `.jpeg`, `.png`), automatically sorted numerically by numbers embedded in filenames (`1.jpg`, `2.png`, `10.jpeg`).
-- **Flexible Transcript Regex Parsing**: Supports bracketed timestamps like `[m:ss]`, `[mm:ss]`, `[hh:mm:ss]`, and fractional seconds `[m:ss.ms]`.
-- **Automatic Speech-to-Text Transcription**: Powered by OpenAI Whisper (`--transcribe-audio`). Automatically extracts `[mm:ss]` sentence segments and word-level JSON timestamps for future highlighted subtitles.
-- **FFmpeg Concat Demuxer Engine**: High performance, pillarbox/letterbox resolution scaling (`scale` + `pad`), even dimension enforcement for `libx264`, and pixel aspect ratio normalization (`setsar=1`).
-- **Audio Multiplexing & Video Freeze Frame**: Merges an audio track (`--audio`) using video stream copying (`-c:v copy`). If audio is longer than raw video, automatically freezes the final video frame (`tpad`) to match audio length.
 
----
+- **Audio transcription** using Whisper.
+- **Timed transcript generation** from voice input.
+- **Optional word-level timestamps** via `words.json`.
+- **Transcript-driven image timing** for video generation.
+- **Numeric image sorting** using filenames like `1.jpg`, `2.jpg`, `10.jpg`.
+- **Flexible transcript timestamp parsing**.
+- **FFmpeg-based slideshow rendering**.
+- **Audio muxing** to sync the final video with the original voiceover.
+- **Optional caption burn-in**.
+- **CLI support**.
+- **FastAPI REST API support**.
+- **Modular pipeline architecture**.
+
+***
+
+## Typical End-to-End Flow
+
+1. Record or prepare `voiceover.mp3`.
+2. Use this app to transcribe the audio into `transcript.txt`.
+3. Send that transcript to an external AI workflow to generate images.
+4. Save the generated images into `./images`.
+5. Use this app again with `--images-dir`, `--transcript`, and `--audio` to render the final video.
+6. Optionally add captions during video generation.
+
+***
 
 ## Prerequisites
+
 1. **Python 3.8+**
-2. **FFmpeg** & **ffprobe** installed and accessible in system PATH.
-   - macOS: `brew install ffmpeg`
-   - Ubuntu/Debian: `sudo apt update && sudo apt install ffmpeg`
-3. *(Optional)* **OpenAI Whisper** for automatic transcription:
-   ```bash
-   pip install openai-whisper
-   ```
+2. **FFmpeg** and **ffprobe** installed and available in system PATH.
+3. *(Optional but recommended for transcription)* **OpenAI Whisper**
 
----
+Install dependencies:
 
-## Installation
-
-1. Clone or download the repository.
-2. Install Python dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
----
+Install Whisper if needed:
 
-## REST API Usage (FastAPI)
+```bash
+pip install openai-whisper
+```
+
+***
+
+## Installation
+
+1. Clone or download the repository.
+2. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+***
+
+## CLI Usage
+
+### 1. Transcribe Audio
+
+```bash
+python main.py --transcribe-audio ./voiceover.mp3
+```
+
+### 2. Generate Final Video
+
+```bash
+python main.py \
+  --images-dir ./images \
+  --transcript ./transcript.txt \
+  --audio ./voiceover.mp3 \
+  --output output.mp4
+```
+
+### 3. Generate Final Video with Captions
+
+```bash
+python main.py \
+  --images-dir ./images \
+  --transcript ./transcript.txt \
+  --audio ./voiceover.mp3 \
+  --add-captions \
+  --output output.mp4
+```
+
+### Caption Options
+
+- `--add-captions`: Enable subtitle burn-in.
+- `--words-json`: Path to a word-level timestamps JSON file.
+- `--caption-highlight-color`: Highlight color for the active word.
+- `--caption-text-color`: Normal caption text color.
+- `--caption-outline-color`: Caption outline color.
+- `--caption-font-size`: Caption font size.
+- `--caption-position`: `bottom`, `middle`, or `top`.
+- `--caption-margin-bottom`: Bottom margin for captions.
+- `--caption-max-words-per-line`: Maximum words per line.
+- `--caption-font-name`: Caption font family.
+
+***
+
+## REST API Usage
 
 ### Start the Server
-
-Run Uvicorn server on port 8000:
 
 ```bash
 uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Interactive Swagger UI documentation is automatically available at:
+Swagger UI is available at:
+
 `http://localhost:8000/docs`
 
----
+### Main API Capabilities
 
-### API Endpoints & `curl` Examples
+- Submit transcription jobs.
+- Download transcript outputs.
+- Submit final video generation jobs.
+- Upload images, transcript, and audio.
+- Download the generated video.
 
-#### 1. Health Check (`GET /health`)
+***
 
-```bash
-curl http://localhost:8000/health
-```
+## Example Pipeline
 
-#### 2. Submit Audio Transcription Job (`POST /transcribe`)
+### Stage A: Inside This App
 
-```bash
-curl -X POST "http://localhost:8000/transcribe" \
-  -F "audio_file=@/path/to/voiceover.mp3" \
-  -F "whisper_model=small"
-```
-*Response*: `{"job_id": "3b29c991-...", "status": "queued"}`
+Input:
 
-#### 3. Poll Transcription Job Status (`GET /transcribe/{job_id}`)
+- `voiceover.mp3`
 
-```bash
-curl http://localhost:8000/transcribe/3b29c991-...
-```
-*Response when completed*:
-```json
-{
-  "job_id": "3b29c991-...",
-  "status": "completed",
-  "result_urls": {
-    "transcript": "/download/3b29c991-.../transcript",
-    "words": "/download/3b29c991-.../words"
-  }
-}
-```
+Output:
 
-#### 4. Submit Video Generation Job (`POST /generate-video`)
+- `transcript.txt`
+- optional `words.json`
 
-**Using individual image files:**
+### Stage B: Outside This App
 
-```bash
-curl -X POST "http://localhost:8000/generate-video" \
-  -F "images_mode=files" \
-  -F "images=@/path/to/1.jpg" \
-  -F "images=@/path/to/2.jpg" \
-  -F "audio_file=@/path/to/voiceover.mp3" \
-  -F "whisper_model=small" \
-  -F "resolution=1920x1080" \
-  -F "fps=30"
-```
+Input:
 
-**Using ZIP archive of images:**
+- `transcript.txt`
 
-```bash
-curl -X POST "http://localhost:8000/generate-video" \
-  -F "images_mode=zip" \
-  -F "zip_file=@/path/to/images.zip" \
-  -F "transcript_file=@/path/to/transcript.txt" \
-  -F "audio_file=@/path/to/voiceover.mp3"
-```
-*Response*: `{"job_id": "8f3ccb55-...", "status": "queued"}`
+Output:
 
-#### 5. Poll Video Generation Job Status (`GET /generate-video/{job_id}`)
+- AI-generated images saved into `./images`
 
-```bash
-curl http://localhost:8000/generate-video/8f3ccb55-...
-```
+### Stage C: Inside This App Again
 
-#### 6. Download Output File (`GET /download/{job_id}/{file_type}`)
+Input:
 
-```bash
-# Download transcript
-curl -O http://localhost:8000/download/3b29c991-.../transcript
+- `./images`
+- `transcript.txt`
+- `voiceover.mp3`
 
-# Download video MP4
-curl -o final.mp4 http://localhost:8000/download/8f3ccb55-.../video
-```
+Output:
 
----
+- `output.mp4`
+- optional captioned video
 
-## CLI Usage Examples
+***
 
-### Standalone Transcribe-Only Mode
+## Project Structure
 
-```bash
-python main.py --transcribe-audio ./v/voiceover01.mp3
-```
-
-### Fully Automated Mode (Images + Audio -> Video)
-
-```bash
-python main.py --images-dir ./v/ --transcribe-audio ./v/voiceover01.mp3 --audio ./v/voiceover01.mp3 --output final.mp4
-```
-
-### Manual Transcript Mode
-
-If you create your own transcript file with timestamps and text, you can run:
-
-```bash
-python main.py \
-  --images-dir ./images \
-  --transcript ./transcript.txt \
-  --audio ./voiceover.mp3 \
-  --output output.mp4
-```
-
-**With Word-Highlighted Subtitles:**
-To burn subtitles when using a manual transcript, pass `--add-captions` alongside your `words.json` file (or after running `--transcribe-audio` to generate `output_words.json`):
-
-```bash
-python main.py \
-  --images-dir ./images \
-  --transcript ./transcript.txt \
-  --audio ./voiceover.mp3 \
-  --add-captions \
-  --words-json ./output_words.json \
-  --output output.mp4
-```
-
-### Word-Highlighted Captions Mode
-
-Generate and burn word-highlighted subtitles (Word-Highlighted Subtitles) onto the final video using word timestamps extracted by Whisper:
-
-```bash
-python main.py \
-  --images-dir ./v/ \
-  --transcribe-audio ./v/voiceover01.mp3 \
-  --audio ./v/voiceover01.mp3 \
-  --add-captions \
-  --caption-highlight-color "#FF6B00" \
-  --output final.mp4
-```
-
-#### CLI Caption Options:
-- `--add-captions`: Flag to enable word-highlighted subtitle burn-in.
-- `--words-json`: Path to word timestamps JSON file (defaults to `output_words.json`).
-- `--caption-highlight-color`: Active word highlight hex color (default: `#FFD60A`).
-- `--caption-text-color`: Inactive text hex color (default: `#FFFFFF`).
-- `--caption-outline-color`: Text outline hex color (default: `#000000`).
-- `--caption-font-size`: Subtitle font size in px (default: auto ~5% of video height).
-- `--caption-position`: Subtitle vertical alignment: `bottom`, `middle`, `top` (default: `bottom`).
-- `--caption-margin-bottom`: Vertical margin from screen edge in px (default: `80`).
-- `--caption-max-words-per-line`: Maximum words per subtitle line (default: `5`).
-- `--caption-font-name`: Font family name (default: `Arial Black`).
-
----
-
-## Project Structure & Architecture
-
-```
+```text
 .
-├── main.py                       # CLI entry point & branching orchestrator
-├── api.py                        # FastAPI REST API layer & Background Job Manager
+├── main.py                       # CLI entry point
+├── api.py                        # FastAPI REST API
 ├── modules/
-│   ├── __init__.py
-│   ├── transcript_parser.py      # Extract timestamps from text files
-│   ├── timing_calculator.py      # Map timestamps to images & compute durations
-│   ├── ffmpeg_engine.py          # FFmpeg check & video rendering via concat demuxer
-│   ├── audio_muxer.py            # Audio probing, duration check & stream-copy muxing
-│   ├── transcriber.py            # Whisper speech-to-text & word-level JSON extraction
-│   ├── caption_generator.py      # Word-highlighted ASS subtitle generation & FFmpeg burn-in
-│   └── pipeline.py               # Pipeline orchestrator with extensibility hooks
+│   ├── transcript_parser.py      # Parse transcript timestamps
+│   ├── timing_calculator.py      # Calculate image durations from transcript timing
+│   ├── ffmpeg_engine.py          # Render slideshow video with FFmpeg
+│   ├── audio_muxer.py            # Merge audio with final video
+│   ├── transcriber.py            # Audio transcription and word timestamps
+│   ├── caption_generator.py      # Generate captions/subtitles
+│   └── pipeline.py               # Main workflow orchestrator
 ├── tests/
-│   ├── __init__.py
-│   ├── test_api.py
-│   ├── test_transcript_parser.py
-│   ├── test_timing_calculator.py
-│   ├── test_ffmpeg_engine.py
-│   ├── test_audio_muxer.py
-│   ├── test_transcriber.py
-│   ├── test_caption_generator.py
-│   └── test_main.py
-├── docs/
-│   └── superpowers/specs/        # Design specification documentation
-├── requirements.txt              # Dependencies
-└── README.md                     # Documentation
+├── requirements.txt
+└── README.md
 ```
 
----
+***
+
+## Use Cases
+
+This app is useful for:
+
+- Voice-first AI video pipelines.
+- Narrated story video generation.
+- Educational or explainer slideshow creation.
+- Social media automation workflows.
+- Captioned slideshow video rendering.
+
+***
 
 ## Running Tests
-
-Execute all unit tests with `pytest`:
 
 ```bash
 pytest
 ```
+EOF && sed -n '1,220p' output/README.md | head -n 80

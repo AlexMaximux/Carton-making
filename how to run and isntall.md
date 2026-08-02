@@ -232,3 +232,15 @@ curl -X POST "http://localhost:8000/generate-video" \
 
 
 curl -o final.mp4 http://localhost:8000/download/{job_id}/video
+
+
+
+
+python main.py \
+  --images-dir ./images \
+  --transcript ./transcript.txt \
+  --audio ./voiceover.mp3 \
+  --add-captions \
+  --output output.mp4
+
+
