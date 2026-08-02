@@ -11,3 +11,5 @@ test_assets/
 output_transcript.txt
 output_words.json
 v2/
+storage/
+
