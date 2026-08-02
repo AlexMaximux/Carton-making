@@ -291,8 +291,9 @@ def check_ffmpeg_subtitles_supported() -> None:
                 "Your installed FFmpeg build does not support subtitle burning (`subtitles`/`ass` filter with `libass` is missing).\n\n"
                 "To enable subtitle burning:\n"
                 "  - On macOS (Homebrew):\n"
+                "      brew unlink ffmpeg\n"
                 "      brew tap homebrew-ffmpeg/ffmpeg\n"
-                "      brew install homebrew-ffmpeg/ffmpeg/ffmpeg-full\n"
+                "      brew install homebrew-ffmpeg/ffmpeg/ffmpeg\n"
                 "  - On Ubuntu / Linux:\n"
                 "      sudo apt update && sudo apt install ffmpeg\n"
             )
