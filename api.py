@@ -47,6 +47,9 @@ STORAGE_DIR = Path("./storage").resolve()
 STORAGE_DIR.mkdir(exist_ok=True)
 
 
+import json
+
+
 # 2. Thread-Safe Job Store Model & Manager
 class JobModel(BaseModel):
     job_id: str
@@ -59,10 +62,19 @@ class JobModel(BaseModel):
 
 
 class JobStore:
-    """Thread-safe in-memory job status store backed by threading.Lock."""
+    """Thread-safe in-memory job status store backed by disk persistence for multi-worker process safety and server restarts."""
     def __init__(self):
         self._jobs: Dict[str, JobModel] = {}
         self._lock = threading.Lock()
+
+    def _save_job_to_disk(self, job: JobModel):
+        try:
+            job_dir = STORAGE_DIR / job.job_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            meta_file = job_dir / "job.json"
+            meta_file.write_text(job.model_dump_json(indent=2), encoding="utf-8")
+        except Exception:
+            pass
 
     def create_job(self, job_id: str, job_type: str) -> JobModel:
         with self._lock:
@@ -74,11 +86,25 @@ class JobStore:
                 created_at=now_iso
             )
             self._jobs[job_id] = job
+            self._save_job_to_disk(job)
             return job
 
     def get_job(self, job_id: str) -> Optional[JobModel]:
         with self._lock:
-            return self._jobs.get(job_id)
+            if job_id in self._jobs:
+                return self._jobs[job_id]
+
+            # Disk fallback for multi-worker process setup or server restarts
+            meta_file = STORAGE_DIR / job_id / "job.json"
+            if meta_file.is_file():
+                try:
+                    data = json.loads(meta_file.read_text(encoding="utf-8"))
+                    job = JobModel(**data)
+                    self._jobs[job_id] = job
+                    return job
+                except Exception:
+                    pass
+            return None
 
     def update_job(
         self,
@@ -89,7 +115,7 @@ class JobStore:
         result_urls: Optional[Dict[str, str]] = None
     ) -> Optional[JobModel]:
         with self._lock:
-            job = self._jobs.get(job_id)
+            job = self.get_job(job_id)
             if not job:
                 return None
             if status:
@@ -100,6 +126,8 @@ class JobStore:
                 job.result_paths.update(result_paths)
             if result_urls:
                 job.result_urls.update(result_urls)
+            self._jobs[job_id] = job
+            self._save_job_to_disk(job)
             return job
 
 
