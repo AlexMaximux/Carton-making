@@ -154,6 +154,19 @@ python main.py \
   --output output.mp4
 ```
 
+**With Word-Highlighted Subtitles:**
+To burn subtitles when using a manual transcript, pass `--add-captions` alongside your `words.json` file (or after running `--transcribe-audio` to generate `output_words.json`):
+
+```bash
+python main.py \
+  --images-dir ./images \
+  --transcript ./transcript.txt \
+  --audio ./voiceover.mp3 \
+  --add-captions \
+  --words-json ./output_words.json \
+  --output output.mp4
+```
+
 ### Word-Highlighted Captions Mode
 
 Generate and burn word-highlighted subtitles (Word-Highlighted Subtitles) onto the final video using word timestamps extracted by Whisper:
