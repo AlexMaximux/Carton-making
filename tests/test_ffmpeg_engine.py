@@ -4,7 +4,8 @@ Unit tests for ffmpeg_engine module.
 import pytest
 from modules.ffmpeg_engine import (
     parse_and_validate_resolution,
-    build_concat_file_content
+    build_concat_file_content,
+    build_filter_complex_script
 )
 from modules.timing_calculator import ImageSegment
 
@@ -42,3 +43,14 @@ def test_build_concat_file_content():
         "file '/path/to/2.png'\n"
     )
     assert content == expected
+
+
+def test_build_filter_complex_script():
+    segments = [
+        ImageSegment(image_path="/path/to/1.jpg", start_time=0.0, duration=4.5),
+        ImageSegment(image_path="/path/to/2.png", start_time=4.5, duration=3.0),
+    ]
+    input_args, script = build_filter_complex_script(segments, resolution="1920x1080", fps=30)
+    assert input_args == ["-loop", "1", "-t", "4.5000", "-i", "/path/to/1.jpg", "-loop", "1", "-t", "3.0000", "-i", "/path/to/2.png"]
+    assert "concat=n=2:v=1:a=0[v_slideshow];" in script
+    assert "[v_slideshow]fps=30,format=yuv420p[v]" in script

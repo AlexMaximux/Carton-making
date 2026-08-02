@@ -86,6 +86,40 @@ def build_concat_file_content(segments: List[ImageSegment]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def build_filter_complex_script(
+    segments: List[ImageSegment],
+    resolution: str = "1920x1080",
+    fps: int = 30,
+    additional_filters: List[str] = None
+) -> Tuple[List[str], str]:
+    """
+    Builds FFmpeg command input arguments and filter_complex_script content
+    for a rock-solid, frame-accurate slideshow from still images.
+    """
+    w, h = parse_and_validate_resolution(resolution)
+    
+    input_args = []
+    filter_lines = []
+    concat_inputs = []
+
+    for idx, seg in enumerate(segments):
+        input_args.extend(["-loop", "1", "-t", f"{seg.duration:.4f}", "-i", seg.image_path])
+        filter_lines.append(
+            f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[v{idx}];"
+        )
+        concat_inputs.append(f"[v{idx}]")
+
+    concat_line = "".join(concat_inputs) + f"concat=n={len(segments)}:v=1:a=0[v_slideshow];"
+    filter_lines.append(concat_line)
+
+    extra = ("," + ",".join(additional_filters)) if additional_filters else ""
+    filter_lines.append(f"[v_slideshow]fps={fps}{extra},format=yuv420p[v]")
+
+    script_content = "\n".join(filter_lines) + "\n"
+    return input_args, script_content
+
+
 def render_slideshow(
     segments: List[ImageSegment],
     output_path: Union[str, Path],
@@ -94,52 +128,39 @@ def render_slideshow(
     additional_filters: List[str] = None
 ) -> Path:
     """
-    Executes FFmpeg concat demuxer to render a slideshow video from ImageSegment list.
-
-    Filter chain used:
-    scale=W:H:force_original_aspect_ratio=decrease,pad=W:H:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=FPS,format=yuv420p
+    Executes FFmpeg slideshow video rendering from ImageSegment list using loop+concat filterchain.
+    Ensures frame-accurate duration per slide without dropped or stuck frames.
     """
     check_ffmpeg_installed()
     w, h = parse_and_validate_resolution(resolution)
     out_file = Path(output_path).resolve()
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
-    concat_content = build_concat_file_content(segments)
+    if not segments:
+        raise ValueError("Cannot render slideshow with empty segments list.")
 
-    # Write temporary concat list file
+    input_args, script_content = build_filter_complex_script(
+        segments=segments,
+        resolution=resolution,
+        fps=fps,
+        additional_filters=additional_filters
+    )
+
     with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as tmp:
-        tmp.write(concat_content)
-        tmp_path = tmp.name
+        tmp.write(script_content)
+        tmp_script_path = tmp.name
 
     try:
-        total_dur = segments[-1].end_time if segments else 0.0
-
-        # Build video filter chain
-        base_filter = (
-            f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,"
-            f"setsar=1,"
-            f"fps={fps},"
-            f"format=yuv420p"
-        )
-        if additional_filters:
-            full_filter = base_filter + "," + ",".join(additional_filters)
-        else:
-            full_filter = base_filter
-
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", tmp_path,
-            "-t", f"{total_dur:.4f}",
-            "-vf", full_filter,
+        cmd = ["ffmpeg", "-y"]
+        cmd.extend(input_args)
+        cmd.extend([
+            "-filter_complex_script", tmp_script_path,
+            "-map", "[v]",
             "-c:v", "libx264",
             "-preset", "medium",
             "-crf", "23",
             str(out_file)
-        ]
+        ])
 
         result = subprocess.run(
             cmd,
@@ -154,5 +175,5 @@ def render_slideshow(
         return out_file
 
     finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        if os.path.exists(tmp_script_path):
+            os.remove(tmp_script_path)
