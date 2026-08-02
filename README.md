@@ -144,9 +144,41 @@ python main.py --images-dir ./v/ --transcribe-audio ./v/voiceover01.mp3 --audio 
 
 ### Manual Transcript Mode
 
+If you create your own transcript file with timestamps and text, you can run:
+
 ```bash
-python main.py --images-dir ./images --transcript ./transcript.txt --audio ./voiceover.mp3 --output output.mp4
+python main.py \
+  --images-dir ./images \
+  --transcript ./transcript.txt \
+  --audio ./voiceover.mp3 \
+  --output output.mp4
 ```
+
+### Word-Highlighted Captions Mode
+
+Generate and burn word-highlighted subtitles (Word-Highlighted Subtitles) onto the final video using word timestamps extracted by Whisper:
+
+```bash
+python main.py \
+  --images-dir ./v/ \
+  --transcribe-audio ./v/voiceover01.mp3 \
+  --audio ./v/voiceover01.mp3 \
+  --add-captions \
+  --caption-highlight-color "#FF6B00" \
+  --output final.mp4
+```
+
+#### CLI Caption Options:
+- `--add-captions`: Flag to enable word-highlighted subtitle burn-in.
+- `--words-json`: Path to word timestamps JSON file (defaults to `output_words.json`).
+- `--caption-highlight-color`: Active word highlight hex color (default: `#FFD60A`).
+- `--caption-text-color`: Inactive text hex color (default: `#FFFFFF`).
+- `--caption-outline-color`: Text outline hex color (default: `#000000`).
+- `--caption-font-size`: Subtitle font size in px (default: auto ~5% of video height).
+- `--caption-position`: Subtitle vertical alignment: `bottom`, `middle`, `top` (default: `bottom`).
+- `--caption-margin-bottom`: Vertical margin from screen edge in px (default: `80`).
+- `--caption-max-words-per-line`: Maximum words per subtitle line (default: `5`).
+- `--caption-font-name`: Font family name (default: `Arial Black`).
 
 ---
 
@@ -163,6 +195,7 @@ python main.py --images-dir ./images --transcript ./transcript.txt --audio ./voi
 │   ├── ffmpeg_engine.py          # FFmpeg check & video rendering via concat demuxer
 │   ├── audio_muxer.py            # Audio probing, duration check & stream-copy muxing
 │   ├── transcriber.py            # Whisper speech-to-text & word-level JSON extraction
+│   ├── caption_generator.py      # Word-highlighted ASS subtitle generation & FFmpeg burn-in
 │   └── pipeline.py               # Pipeline orchestrator with extensibility hooks
 ├── tests/
 │   ├── __init__.py
@@ -172,6 +205,7 @@ python main.py --images-dir ./images --transcript ./transcript.txt --audio ./voi
 │   ├── test_ffmpeg_engine.py
 │   ├── test_audio_muxer.py
 │   ├── test_transcriber.py
+│   ├── test_caption_generator.py
 │   └── test_main.py
 ├── docs/
 │   └── superpowers/specs/        # Design specification documentation
