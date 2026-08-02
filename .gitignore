@@ -8,7 +8,6 @@ __pycache__/
 *.wav
 *.mp3
 test_assets/
-docs/superpowers/
 output_transcript.txt
 output_words.json
-
+v2/
