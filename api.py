@@ -2,10 +2,15 @@
 REST API Layer for Modular Slideshow Video Generator & Whisper Transcriber
 Powered by FastAPI & Uvicorn.
 """
+import logging
 import shutil
 import threading
+import traceback
 import uuid
 import zipfile
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("api")
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -91,10 +96,7 @@ class JobStore:
 
     def get_job(self, job_id: str) -> Optional[JobModel]:
         with self._lock:
-            if job_id in self._jobs:
-                return self._jobs[job_id]
-
-            # Disk fallback for multi-worker process setup or server restarts
+            # Check disk first to ensure real-time multi-worker process synchronization
             meta_file = STORAGE_DIR / job_id / "job.json"
             if meta_file.is_file():
                 try:
@@ -104,7 +106,7 @@ class JobStore:
                     return job
                 except Exception:
                     pass
-            return None
+            return self._jobs.get(job_id)
 
     def update_job(
         self,
@@ -169,6 +171,7 @@ def health_check():
 
 # 4. Background Workers
 def run_transcribe_job(job_id: str, audio_file_path: Path, whisper_model: str):
+    logger.info(f"Starting transcribe job {job_id} (model={whisper_model})")
     job_dir = STORAGE_DIR / job_id
     try:
         job_store.update_job(job_id, status="processing")
@@ -198,7 +201,10 @@ def run_transcribe_job(job_id: str, audio_file_path: Path, whisper_model: str):
             result_paths=result_paths,
             result_urls=result_urls
         )
+        logger.info(f"Transcribe job {job_id} completed successfully.")
     except Exception as err:
+        err_tb = f"{err}\n{traceback.format_exc()}"
+        logger.error(f"Transcribe job {job_id} failed: {err_tb}")
         job_store.update_job(job_id, status="failed", error_message=str(err))
 
 
@@ -214,12 +220,14 @@ def run_generate_video_job(
     total_duration: Optional[float],
     on_mismatch: str
 ):
+    logger.info(f"Starting generate-video job {job_id}")
     job_dir = STORAGE_DIR / job_id
     try:
         job_store.update_job(job_id, status="processing")
 
         # If audio provided without transcript, transcribe audio first
         if audio_file_path and not transcript_file_path:
+            logger.info(f"Job {job_id}: Transcribing audio to generate transcript...")
             res = transcribe_audio(audio_file_path, model_size=whisper_model)
             t_path = job_dir / "transcript.txt"
             t_path.write_text(format_segments_as_transcript(res["segments"]), encoding='utf-8')
@@ -255,7 +263,10 @@ def run_generate_video_job(
             result_paths=result_paths,
             result_urls=result_urls
         )
+        logger.info(f"Generate-video job {job_id} completed successfully.")
     except Exception as err:
+        err_tb = f"{err}\n{traceback.format_exc()}"
+        logger.error(f"Generate-video job {job_id} failed: {err_tb}")
         job_store.update_job(job_id, status="failed", error_message=str(err))
 
 
