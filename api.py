@@ -70,7 +70,7 @@ class JobStore:
     """Thread-safe in-memory job status store backed by disk persistence for multi-worker process safety and server restarts."""
     def __init__(self):
         self._jobs: Dict[str, JobModel] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def _save_job_to_disk(self, job: JobModel):
         try:
@@ -80,6 +80,18 @@ class JobStore:
             meta_file.write_text(job.model_dump_json(indent=2), encoding="utf-8")
         except Exception:
             pass
+
+    def _get_job_unlocked(self, job_id: str) -> Optional[JobModel]:
+        meta_file = STORAGE_DIR / job_id / "job.json"
+        if meta_file.is_file():
+            try:
+                data = json.loads(meta_file.read_text(encoding="utf-8"))
+                job = JobModel(**data)
+                self._jobs[job_id] = job
+                return job
+            except Exception:
+                pass
+        return self._jobs.get(job_id)
 
     def create_job(self, job_id: str, job_type: str) -> JobModel:
         with self._lock:
@@ -96,17 +108,7 @@ class JobStore:
 
     def get_job(self, job_id: str) -> Optional[JobModel]:
         with self._lock:
-            # Check disk first to ensure real-time multi-worker process synchronization
-            meta_file = STORAGE_DIR / job_id / "job.json"
-            if meta_file.is_file():
-                try:
-                    data = json.loads(meta_file.read_text(encoding="utf-8"))
-                    job = JobModel(**data)
-                    self._jobs[job_id] = job
-                    return job
-                except Exception:
-                    pass
-            return self._jobs.get(job_id)
+            return self._get_job_unlocked(job_id)
 
     def update_job(
         self,
@@ -117,7 +119,7 @@ class JobStore:
         result_urls: Optional[Dict[str, str]] = None
     ) -> Optional[JobModel]:
         with self._lock:
-            job = self.get_job(job_id)
+            job = self._get_job_unlocked(job_id)
             if not job:
                 return None
             if status:
